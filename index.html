@@ -39,6 +39,9 @@ input:focus,select:focus{outline:2px solid var(--acc);outline-offset:-1px}
 .tbar{display:flex;align-items:center;justify-content:space-between;background:var(--soft);border-radius:12px;padding:10px 12px;margin-top:6px}
 .tbar span{font-weight:700}
 .tbar b{font-size:24px;font-variant-numeric:tabular-nums}
+.sub{display:flex;justify-content:space-between;padding:6px 12px 0;color:var(--mut);font-weight:600}
+.sub b{color:var(--ink);font-variant-numeric:tabular-nums}
+.det{color:var(--mut);font-size:13px;font-weight:500}
 .btns3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .btn{height:52px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-family:inherit;font-weight:700;font-size:13px;letter-spacing:.02em;padding:0 4px;cursor:pointer;width:100%}
 .btn:active{transform:scale(.98)}
@@ -83,6 +86,8 @@ td:nth-child(2){width:84px}td:nth-child(3){width:34px}
   <section class="card">
     <div class="namarow"><select id="nama" aria-label="Nama barang"></select><span id="pill" class="pill"></span></div>
     <div id="rows"></div>
+    <div class="sub"><span>Total ikat</span><b id="gIkat">0</b></div>
+    <div class="sub"><span>Total ecer</span><b id="gEcer">0</b></div>
     <div class="tbar"><span>Total ikat + ecer</span><b id="grand">0</b></div>
   </section>
 
@@ -142,13 +147,35 @@ function persist(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
 
 /* ---------- hitungan ---------- */
 function isi(){var x=S.items.find(function(x){return x.n===S.nama;});return x?x.i:0;}
-function rowTotal(r){
+function rowTotal(r,ii){
+  if(ii===undefined)ii=isi();
   var v=r.k.filter(function(x){return x!=='';}).map(Number);
   if(!v.length)return 0;
-  var t=r.m==='ikat'?v.reduce(function(a,b){return a*b;},1)*isi():v.reduce(function(a,b){return a+b;},0);
+  var t=r.m==='ikat'?v.reduce(function(a,b){return a*b;},1)*ii:v.reduce(function(a,b){return a+b;},0);
   return Number.isSafeInteger(t)?t:NaN;
 }
 function grand(){return S.rows.reduce(function(a,r){return a+rowTotal(r);},0);}
+/* pisah total: Total ikat = jumlah IKAT (hasil kali kotak), Total ecer = jumlah satuan ecer */
+function rowIkat(r){
+  if(r.m!=='ikat')return 0;
+  var v=r.k.filter(function(x){return x!=='';}).map(Number);
+  if(!v.length)return 0;
+  var t=v.reduce(function(a,b){return a*b;},1);
+  return Number.isSafeInteger(t)?t:NaN;
+}
+function split(rows){
+  var ik=0,ec=0;
+  rows.forEach(function(r){if(r.m==='ikat')ik+=rowIkat(r);else ec+=rowTotal(r);});
+  return {ik:ik,ec:ec};
+}
+/* data lama dihitung ulang dari isian tersimpan */
+function parts(x){
+  if(typeof x.ikt==='number')return {ik:x.ikt,ec:x.ec||0};
+  if(x.rows)return split(x.rows);
+  if(typeof x.ik==='number'&&x.isi>0)return {ik:Math.round(x.ik/x.isi),ec:x.ec||0};
+  return {ik:0,ec:x.total};
+}
+function detail(x){var p=parts(x);return 'ikat '+fmt(p.ik)+' · ecer '+fmt(p.ec);}
 
 /* ---------- tampilan ---------- */
 function buildRows(){
@@ -171,6 +198,9 @@ function paintRows(){
 }
 function calc(){
   document.querySelectorAll('.row').forEach(function(el,ri){el.querySelector('.rt').textContent=fmt(rowTotal(S.rows[ri]));});
+  var sp=split(S.rows,isi());
+  $('#gIkat').textContent=fmt(sp.ik);
+  $('#gEcer').textContent=fmt(sp.ec);
   $('#grand').textContent=fmt(grand());
 }
 function paintPill(){
@@ -185,7 +215,7 @@ function paintNama(){
 }
 function paintSaved(){
   $('#savedCard').hidden=!S.saved.length;
-  $('#sbody').innerHTML=S.saved.map(function(x){return '<div class="srow"><span>'+esc(x.n)+'</span><b>'+fmt(x.total)+'</b></div>';}).join('');
+  $('#sbody').innerHTML=S.saved.map(function(x){return '<div class="srow"><span>'+esc(x.n)+'<br><span class="det">'+detail(x)+'</span></span><b>'+fmt(x.total)+'</b></div>';}).join('');
 }
 function paintKartu(){
   $('#kbody').innerHTML=S.items.map(function(x,i){
@@ -221,12 +251,13 @@ async function simpan(){
   if(!Number.isFinite(t)){toast('Angka terlalu besar');return;}
   if(t<=0){toast('Isi hitungan dulu');return;}
   var ex=S.saved.find(function(x){return x.n===S.nama;});
-  var entry={n:S.nama,total:t,rows:clone(S.rows),isi:isi(),ts:Date.now()};
+  var sp=split(S.rows,isi());
+  var entry={n:S.nama,total:t,ikt:sp.ik,ec:sp.ec,rows:clone(S.rows),isi:isi(),ts:Date.now()};
   if(ex&&S.edit!==S.nama){
     var c=await ask('Sudah tersimpan',S.nama+' : '+fmt(ex.total)+'\nHitungan baru : '+fmt(t),[
       {t:'Timpa',v:'timpa'},{t:'Top Up',v:'top'},{t:'Batal',v:null,c:'ghost'}]);
     if(!c)return;
-    if(c==='top'){ex.total+=t;ex.rows=null;ex.ts=Date.now();}
+    if(c==='top'){var p0=parts(ex);ex.ikt=p0.ik+sp.ik;ex.ec=p0.ec+sp.ec;ex.total+=t;ex.rows=null;ex.ts=Date.now();}
     else Object.assign(ex,entry);
   }else if(ex){Object.assign(ex,entry);}
   else S.saved.push(entry);
@@ -238,6 +269,8 @@ async function topUp(i){
   if(!(t>0)){toast('Hitungan masih kosong');return false;}
   var c=await ask('Top Up','Tambah '+fmt(t)+' ke '+ex.n+' ?',[{t:'Ya',v:1},{t:'Batal',v:0,c:'ghost'}]);
   if(!c)return false;
+  var p1=parts(ex),sp=split(S.rows,isi());
+  ex.ikt=p1.ik+sp.ik;ex.ec=p1.ec+sp.ec;
   ex.total+=t;ex.rows=null;ex.ts=Date.now();
   kosong();paintSaved();persist();toast('Top Up berhasil');
   return true;
@@ -276,7 +309,7 @@ function openManage(){
   var o=$('#ov');o.innerHTML='';
   var s=document.createElement('div');s.className='sheet';
   var list=S.saved.length?S.saved.map(function(x,i){
-    return '<div class="item"><div class="in"><span>'+esc(x.n)+'</span><b>'+fmt(x.total)+'</b></div><div class="acts"><button class="btn sm" type="button" data-a="top" data-i="'+i+'">Top Up</button><button class="btn sm" type="button" data-a="edit" data-i="'+i+'">Edit</button><button class="btn sm dng" type="button" data-a="del" data-i="'+i+'">Hapus</button></div></div>';
+    return '<div class="item"><div class="in"><span>'+esc(x.n)+'<br><span class="det">'+detail(x)+'</span></span><b>'+fmt(x.total)+'</b></div><div class="acts"><button class="btn sm" type="button" data-a="top" data-i="'+i+'">Top Up</button><button class="btn sm" type="button" data-a="edit" data-i="'+i+'">Edit</button><button class="btn sm dng" type="button" data-a="del" data-i="'+i+'">Hapus</button></div></div>';
   }).join(''):'<div class="empty">Belum ada data tersimpan</div>';
   s.innerHTML='<div class="shead"><h3>Kosongkan / Edit</h3><button class="x" type="button" data-a="close" aria-label="Tutup">✕</button></div>'+
     '<button class="btn ghost" type="button" data-a="kosong">KOSONGKAN HITUNGAN</button>'+list+
@@ -300,7 +333,7 @@ function laporan(){
   var d=new Date();
   var tgl=new Intl.DateTimeFormat('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Jayapura'}).format(d);
   var jam=new Intl.DateTimeFormat('id-ID',{hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZone:'Asia/Jayapura'}).format(d);
-  var baris=S.saved.map(function(x,i){return (i+1)+'. '+x.n+' : *'+fmt(x.total)+'*';}).join('\n');
+  var baris=S.saved.map(function(x,i){return (i+1)+'. '+x.n+' : *'+fmt(x.total)+'*\n    '+detail(x);}).join('\n');
   var teks='*LAPORAN STOK GUDANG*\nHatchery Jayapura\n'+tgl+', '+jam+' WIT\n\n'+baris;
   var url='https://wa.me/?text='+encodeURIComponent(teks);
   var w=window.open(url,'_blank');
