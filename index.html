@@ -30,7 +30,7 @@ input:focus,select:focus{outline:2px solid var(--acc);outline-offset:-1px}
 .rtop{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .no{width:22px;height:22px;border-radius:50%;background:var(--soft);color:var(--acc);font-weight:700;font-size:12px;display:grid;place-items:center;flex:none}
 .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;flex:none}
-.seg button{border:0;background:transparent;color:var(--mut);font-family:inherit;font-weight:700;font-size:14px;padding:0 14px;height:36px;cursor:pointer}
+.seg button{border:0;background:transparent;color:var(--mut);font-family:inherit;font-weight:700;font-size:14px;padding:0 10px;white-space:nowrap;height:36px;cursor:pointer}
 .seg button.on{background:var(--acc);color:var(--acc-ink)}
 .rt{margin-left:auto;font-weight:700;font-size:18px;font-variant-numeric:tabular-nums}
 .boxes{display:grid;grid-template-columns:1fr 14px 1fr 14px 1fr 14px 1fr;align-items:center}
@@ -60,6 +60,13 @@ th{background:var(--soft);color:var(--acc);font-size:13px;padding:7px 8px;text-a
 td{padding:5px 4px;border-top:1px solid var(--line);font-weight:600;font-size:14px}
 td input{height:38px;text-align:center}
 td:nth-child(2){width:84px}td:nth-child(3){width:34px}
+.page{position:fixed;inset:0;background:var(--bg);z-index:15;overflow:auto;padding:10px 10px calc(28px + env(safe-area-inset-bottom))}
+.page .wrap{max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.phead{display:flex;align-items:center;gap:10px}
+.phead .btn{width:auto;padding:0 14px}
+.phead h3{margin:0}
+.nm{text-align:left;font-weight:600;text-transform:uppercase}
+td input.nm{text-align:left}
 .x{border:0;background:transparent;color:var(--mut);font-size:16px;width:30px;height:30px;cursor:pointer}
 .kadd{display:grid;grid-template-columns:1fr 70px 46px;gap:6px;margin-top:8px}
 .kadd input{height:40px}.kadd .btn{height:40px;font-size:18px}
@@ -103,7 +110,11 @@ td:nth-child(2){width:84px}td:nth-child(3){width:34px}
     <div id="sbody"></div>
   </section>
 
-  <section class="card">
+  <button id="bTambah" class="btn ghost" type="button">+ TAMBAH ITEM</button>
+
+  <section class="page" id="kartu" hidden><div class="wrap">
+    <div class="phead"><button id="bKembali" class="btn ghost sm" type="button">← KEMBALI</button><h3>Kartu Stok</h3></div>
+    <div class="card">
     <table>
       <thead><tr><th>Kartu Stok</th><th>Isi ikat</th><th></th></tr></thead>
       <tbody id="kbody"></tbody>
@@ -113,7 +124,8 @@ td:nth-child(2){width:84px}td:nth-child(3){width:34px}
       <input id="ki" inputmode="numeric" placeholder="Isi" autocomplete="off">
       <button id="kplus" class="btn" type="button" aria-label="Tambah barang">+</button>
     </div>
-  </section>
+    </div>
+  </div></section>
 </main>
 
 <div id="ov" class="ov" hidden></div>
@@ -151,21 +163,21 @@ function rowTotal(r,ii){
   if(ii===undefined)ii=isi();
   var v=r.k.filter(function(x){return x!=='';}).map(Number);
   if(!v.length)return 0;
-  var t=r.m==='ikat'?v.reduce(function(a,b){return a*b;},1)*ii:v.reduce(function(a,b){return a+b;},0);
+  var t=r.m==='ikat'?v.reduce(function(a,b){return a*b;},1)*ii:r.m==='ikatp'?v.reduce(function(a,b){return a+b;},0)*ii:v.reduce(function(a,b){return a+b;},0);
   return Number.isSafeInteger(t)?t:NaN;
 }
 function grand(){return S.rows.reduce(function(a,r){return a+rowTotal(r);},0);}
 /* pisah total: Total ikat = jumlah IKAT (hasil kali kotak), Total ecer = jumlah satuan ecer */
 function rowIkat(r){
-  if(r.m!=='ikat')return 0;
+  if(r.m==='ecer')return 0;
   var v=r.k.filter(function(x){return x!=='';}).map(Number);
   if(!v.length)return 0;
-  var t=v.reduce(function(a,b){return a*b;},1);
+  var t=r.m==='ikat'?v.reduce(function(a,b){return a*b;},1):v.reduce(function(a,b){return a+b;},0);
   return Number.isSafeInteger(t)?t:NaN;
 }
 function split(rows){
   var ik=0,ec=0;
-  rows.forEach(function(r){if(r.m==='ikat')ik+=rowIkat(r);else ec+=rowTotal(r);});
+  rows.forEach(function(r){if(r.m==='ecer')ec+=rowTotal(r);else ik+=rowIkat(r);});
   return {ik:ik,ec:ec};
 }
 /* data lama dihitung ulang dari isian tersimpan */
@@ -184,7 +196,7 @@ function buildRows(){
     var el=document.createElement('div');el.className='row';
     var ins='';
     for(var j=0;j<4;j++)ins+=(j?'<i class="op"></i>':'')+'<input inputmode="numeric" maxlength="6" autocomplete="off" data-j="'+j+'" aria-label="Kotak '+(j+1)+'">';
-    el.innerHTML='<div class="rtop"><span class="no">'+(ri+1)+'</span><div class="seg"><button type="button" data-m="ikat">Ikat</button><button type="button" data-m="ecer">Ecer</button></div><div class="rt">0</div></div><div class="boxes">'+ins+'</div>';
+    el.innerHTML='<div class="rtop"><span class="no">'+(ri+1)+'</span><div class="seg"><button type="button" data-m="ikat">Ikat ×</button><button type="button" data-m="ikatp">Ikat +</button><button type="button" data-m="ecer">Ecer</button></div><div class="rt">0</div></div><div class="boxes">'+ins+'</div>';
     box.appendChild(el);
   });
 }
@@ -219,7 +231,7 @@ function paintSaved(){
 }
 function paintKartu(){
   $('#kbody').innerHTML=S.items.map(function(x,i){
-    return '<tr><td>'+esc(x.n)+'</td><td><input inputmode="numeric" maxlength="5" data-ki="'+i+'" value="'+x.i+'" aria-label="Isi ikat '+esc(x.n)+'"></td><td><button class="x" type="button" data-kdel="'+i+'" aria-label="Hapus '+esc(x.n)+'">✕</button></td></tr>';
+    return '<tr><td><input class="nm" data-kn="'+i+'" maxlength="30" autocomplete="off" value="'+esc(x.n)+'" aria-label="Nama barang"></td><td><input inputmode="numeric" maxlength="5" data-ki="'+i+'" value="'+x.i+'" aria-label="Isi ikat '+esc(x.n)+'"></td><td><button class="x" type="button" data-kdel="'+i+'" aria-label="Hapus '+esc(x.n)+'">✕</button></td></tr>';
   }).join('');
 }
 function render(){paintNama();paintRows();calc();paintSaved();paintKartu();}
@@ -382,6 +394,31 @@ $('#kbody').addEventListener('click',async function(ev){
   if(S.nama===n){S.nama=S.items[0].n;S.edit=null;}
   paintNama();paintKartu();calc();persist();
 });
+$('#kbody').addEventListener('change',function(ev){
+  var inp=ev.target;if(inp.dataset.kn===undefined)return;
+  var i=+inp.dataset.kn,old=S.items[i].n;
+  var n=inp.value.trim().toUpperCase().replace(/\s+/g,' ');
+  if(!n||S.items.some(function(x,k){return k!==i&&x.n===n;})){inp.value=old;toast(n?'Nama sudah ada':'Nama tidak boleh kosong');return;}
+  inp.value=n;if(n===old)return;
+  S.items[i].n=n;
+  if(S.nama===old)S.nama=n;
+  if(S.edit===old)S.edit=n;
+  S.saved.forEach(function(x){if(x.n===old)x.n=n;});
+  paintNama();paintSaved();persist();toast('Nama diubah');
+});
+function bukaKartu(b){
+  var k=$('#kartu');k.hidden=!b;
+  document.body.style.overflow=b?'hidden':'';
+  if(b)k.scrollTop=0;
+}
+$('#bTambah').addEventListener('click',function(){
+  bukaKartu(true);
+  try{history.pushState({kartu:1},'');}catch(e){}
+});
+$('#bKembali').addEventListener('click',function(){
+  if(history.state&&history.state.kartu)history.back();else bukaKartu(false);
+});
+window.addEventListener('popstate',function(){bukaKartu(false);});
 $('#ki').addEventListener('input',function(){this.value=this.value.replace(/\D/g,'');});
 $('#kplus').addEventListener('click',function(){
   var n=$('#kn').value.trim().toUpperCase().replace(/\s+/g,' ');
